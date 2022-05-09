@@ -1,3 +1,3 @@
 module github.com/imkos/glog
 
-go 1.11
+go 1.16
