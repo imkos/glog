@@ -402,6 +402,7 @@ func init() {
 	flag.Var(&logging.stderrThreshold, "stderrthreshold", "logs at or above this threshold go to stderr")
 	flag.Var(&logging.vmodule, "vmodule", "comma-separated list of pattern=N settings for file-filtered logging")
 	flag.Var(&logging.traceLocation, "log_backtrace_at", "when logging hits line file:N, emit a stack trace")
+	flag.BoolVar(&logging.logMix, "mix", false, "fallthrough Separate by log type into log file")
 
 	// Default stderrThreshold is ERROR.
 	logging.stderrThreshold = errorLog
@@ -453,6 +454,9 @@ type loggingT struct {
 	// safely using atomic.LoadInt32.
 	vmodule   moduleSpec // The state of the -vmodule flag.
 	verbosity Level      // V logging level, the value of the -v flag/
+
+	// Separate by log type into log file
+	logMix bool
 }
 
 // buffer holds a byte Buffer for reuse. The zero value is ready for use.
@@ -694,12 +698,21 @@ func (l *loggingT) output(s severity, buf *buffer, file string, line int, alsoTo
 		switch s {
 		case fatalLog:
 			l.file[fatalLog].Write(data)
+			if !l.logMix {
+				break
+			}
 			fallthrough
 		case errorLog:
 			l.file[errorLog].Write(data)
+			if !l.logMix {
+				break
+			}
 			fallthrough
 		case warningLog:
 			l.file[warningLog].Write(data)
+			if !l.logMix {
+				break
+			}
 			fallthrough
 		case infoLog:
 			l.file[infoLog].Write(data)
@@ -962,9 +975,8 @@ func (l *loggingT) setV(pc uintptr) Level {
 	fn := runtime.FuncForPC(pc)
 	file, _ := fn.FileLine(pc)
 	// The file is something like /a/b/c/d.go. We want just the d.
-	if strings.HasSuffix(file, ".go") {
-		file = file[:len(file)-3]
-	}
+	file = strings.TrimSuffix(file, ".go")
+
 	if slash := strings.LastIndex(file, "/"); slash >= 0 {
 		file = file[slash+1:]
 	}
