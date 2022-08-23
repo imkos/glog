@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -110,6 +111,21 @@ func create(tag string, t time.Time) (f *os.File, filename string, err error) {
 	name, link := logName(tag, t)
 	var lastErr error
 	for _, dir := range logDirs {
+		// linux  disk full >> /dev/null
+		if runtime.GOOS == "linux" {
+			du, err := NewDiskUsage(dir)
+			if err != nil {
+				return nil, "", fmt.Errorf("log: cannot create log: %v", err)
+			}
+			// 如果空间少于2M
+			if du.Free < (2 << 20) {
+				fmt.Printf("The partition [%s] space is less than 2M.\n", dir)
+				f, err = os.Create("/dev/null")
+				if err == nil {
+					return f, "null", err
+				}
+			}
+		}
 		fname := filepath.Join(dir, name)
 		f, err := os.Create(fname)
 		if err == nil {
